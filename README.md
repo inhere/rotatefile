@@ -1,16 +1,32 @@
 # Rotate File
 
- `rotatefile` provides simple file rotation, compression and cleanup.
+[![GoDoc](https://pkg.go.dev/badge/github.com/gookit/rotatefile.svg)](https://pkg.go.dev/github.com/gookit/rotatefile)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gookit/rotatefile)](https://goreportcard.com/report/github.com/gookit/rotatefile)
+[![Unit-Tests](https://github.com/gookit/rotatefile/workflows/Unit-Tests/badge.svg)](https://github.com/gookit/rotatefile/actions)
+[![GitHub tag](https://img.shields.io/github/tag/gookit/rotatefile)](https://github.com/gookit/rotatefile)
+
+`rotatefile` is a lightweight Go library for **log file rotation, cleanup and gzip compression**.
+
+`rotatefile.Writer` is a plain `io.Writer`, so it drops into the standard library
+`log/slog`, the standard `log`, `zap`, [gookit/slog](https://github.com/gookit/slog) —
+any logger that writes to an `io.Writer`. The Go standard library has no built-in log
+rotation; this fills that gap.
+
+> 中文说明请看 [README.zh-CN.md](README.zh-CN.md)
 
 ## Features
 
-- Rotate file by size and time
-  - Custom filename for rotate file by size
-  - Custom time clock for rotate
-  - Custom file perm for create log file
-  - Custom rotate mode: create, rename
-- Compress rotated file
-- Cleanup old files
+- Rotate by **size** and/or **time** (every hour / day / 30min / minute …)
+- Two rotate modes: `rename` (write to one file, rename on rotate) and `create`
+  (write to a new dated file each period)
+- **Cleanup** old files by `BackupNum` (max count) and/or `BackupTime` (max age)
+- **Compress** rotated files with gzip
+- Customizable: filename for size-rotation, time clock, file permission
+- `FilesClear` — a standalone old-files cleaner, usable for any program's logs
+  (even non-Go ones, e.g. PHP-FPM)
+- Sub-package [`bufwrite`](bufwrite) — buffered writers, incl. `LineWriter` that keeps
+  every write (one log line) intact
+- Tiny dependency surface: only `github.com/gookit/goutil`
 
 ## Install
 
@@ -18,151 +34,122 @@
 go get github.com/gookit/rotatefile
 ```
 
-## Usage
+## Quick Start
 
-### Create a file writer
-
-```go
-logFile := "testdata/go_logger.log"
-writer, err := rotatefile.NewConfig(logFile).Create()
-if err != nil {
-    panic(err)
-}
-
-// use writer
-writer.Write([]byte("log message\n"))
-```
-
-### Use on another logger
+### Create a rotating writer
 
 ```go
 package main
 
-import (
-  "log"
-
-  "github.com/gookit/rotatefile"
-)
+import "github.com/gookit/rotatefile"
 
 func main() {
-	logFile := "testdata/go_logger.log"
-	writer, err := rotatefile.NewConfig(logFile).Create()
+	w, err := rotatefile.NewConfig("testdata/app.log").Create()
 	if err != nil {
-		panic(err) 
+		panic(err)
 	}
+	defer w.Close() // flush + close
 
-	log.SetOutput(writer)
-	log.Println("log message")
+	_, _ = w.Write([]byte("a log message\n"))
 }
 ```
 
-### Available config options
+### Common config options
 
 ```go
-// Config struct for rotate dispatcher
-type Config struct {
-    // Filepath the log file path, will be rotating
-    Filepath string `json:"filepath" yaml:"filepath"`
-    
-    // FilePerm for create log file. default DefaultFilePerm
-    FilePerm os.FileMode `json:"file_perm" yaml:"file_perm"`
-    
-    // MaxSize file contents max size, unit is bytes.
-    // If is equals zero, disable rotate file by size
-    //
-    // default see DefaultMaxSize
-    MaxSize uint64 `json:"max_size" yaml:"max_size"`
-    
-    // RotateTime the file rotate interval time, unit is seconds.
-    // If is equals zero, disable rotate file by time
-    //
-    // default see EveryHour
-    RotateTime RotateTime `json:"rotate_time" yaml:"rotate_time"`
-    
-    // CloseLock use sync lock on write contents, rotating file.
-    //
-    // default: false
-    CloseLock bool `json:"close_lock" yaml:"close_lock"`
-    
-    // BackupNum max number for keep old files.
-    //
-    // 0 is not limit, default is DefaultBackNum
-    BackupNum uint `json:"backup_num" yaml:"backup_num"`
-    
-    // BackupTime max time for keep old files, unit is hours.
-    //
-    // 0 is not limit, default is DefaultBackTime
-    BackupTime uint `json:"backup_time" yaml:"backup_time"`
-    
-    // Compress determines if the rotated log files should be compressed using gzip.
-    // The default is not to perform compression.
-    Compress bool `json:"compress" yaml:"compress"`
-    
-    // RenameFunc you can custom-build filename for rotate file by size.
-    //
-    // default see DefaultFilenameFn
-    RenameFunc func(filePath string, rotateNum uint) string
-    
-    // TimeClock for rotate
-    TimeClock Clocker
-}
+w, err := rotatefile.NewConfig("testdata/app.log", func(c *rotatefile.Config) {
+	c.MaxSize = 100 * rotatefile.OneMByte // rotate at 100MB (0 = disable size rotate)
+	c.RotateTime = rotatefile.EveryDay    // also rotate daily (0 = disable time rotate)
+	c.RotateMode = rotatefile.ModeRename  // or rotatefile.ModeCreate
+	c.BackupNum = 30                      // keep at most 30 old files
+	c.BackupTime = 24 * 7                 // and/or keep files up to a week (hours)
+	c.Compress = true                     // gzip rotated files
+}).Create()
 ```
 
-## Files clear
+See [Config on GoDoc](https://pkg.go.dev/github.com/gookit/rotatefile#Config) for the full list.
+
+### Use with the standard `log/slog` (Go 1.21+)
 
 ```go
-	fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
-		c.AddPattern("/path/to/some*.log")
-		c.BackupNum = 2
-		c.BackupTime = 12 // 12 hours
-	})
-	
-	// clear files on daemon
-	go fc.DaemonClean(nil)
-	
-	// NOTE: stop daemon before exit
-	// fc.QuitDaemon()
+import (
+	"log/slog"
+
+	"github.com/gookit/rotatefile"
+)
+
+w, _ := rotatefile.NewConfig("testdata/app.log", func(c *rotatefile.Config) {
+	c.MaxSize = 50 * rotatefile.OneMByte
+	c.RotateTime = rotatefile.EveryDay
+	c.BackupNum = 7
+}).Create()
+
+logger := slog.New(slog.NewJSONHandler(w, nil))
+logger.Info("log via std slog", "key", "value")
 ```
 
-### Configs
+### Use with the standard `log` (or zap, etc.)
 
 ```go
+import (
+	"log"
 
-// CConfig struct for clean files
-type CConfig struct {
-	// BackupNum max number for keep old files.
-	// 0 is not limit, default is 20.
-	BackupNum uint `json:"backup_num" yaml:"backup_num"`
+	"github.com/gookit/rotatefile"
+)
 
-	// BackupTime max time for keep old files, unit is TimeUnit.
-	//
-	// 0 is not limit, default is a week.
-	BackupTime uint `json:"backup_time" yaml:"backup_time"`
-
-	// Compress determines if the rotated log files should be compressed using gzip.
-	// The default is not to perform compression.
-	Compress bool `json:"compress" yaml:"compress"`
-
-	// Patterns dir path with filename match patterns.
-	//
-	// eg: ["/tmp/error.log.*", "/path/to/info.log.*", "/path/to/dir/*"]
-	Patterns []string `json:"patterns" yaml:"patterns"`
-
-	// TimeClock for clean files
-	TimeClock Clocker
-
-	// TimeUnit for BackupTime. default is hours: time.Hour
-	TimeUnit time.Duration `json:"time_unit" yaml:"time_unit"`
-
-	// CheckInterval for clean files on daemon run. default is 60s.
-	CheckInterval time.Duration `json:"check_interval" yaml:"check_interval"`
-
-	// IgnoreError ignore remove error
-	// TODO IgnoreError bool
-
-	// RotateMode for rotate split files TODO
-	//  - copy+cut: copy contents then truncate file
-	//	- rename : rename file(use for like PHP-FPM app)
-	// RotateMode RotateMode `json:"rotate_mode" yaml:"rotate_mode"`
-}
+w, _ := rotatefile.NewConfig("testdata/app.log").Create()
+log.SetOutput(w)
+log.Println("log message")
 ```
+
+Any logger that accepts an `io.Writer` works the same way (e.g. zap via `zapcore.AddSync(w)`).
+
+### Buffered writing (`bufwrite`)
+
+```go
+import (
+	"github.com/gookit/rotatefile"
+	"github.com/gookit/rotatefile/bufwrite"
+)
+
+w, _ := rotatefile.NewConfig("testdata/app.log").Create()
+
+// LineWriter keeps each Write (one log line) intact - it won't split a record
+// across a flush, so an external collector never reads a half-written line.
+bw := bufwrite.NewLineWriter(w)
+defer bw.Close() // flush + close
+
+_, _ = bw.Write([]byte("a complete log line\n"))
+```
+
+## Clean old files (`FilesClear`)
+
+`FilesClear` cleans old/expired files by pattern, independent of the rotating writer.
+It can also run as a background daemon.
+
+```go
+fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
+	c.AddPattern("/path/to/some*.log")
+	c.BackupNum = 2
+	c.BackupTime = 12 // 12 hours
+})
+
+// one-off clean
+_ = fc.Clean()
+
+// or run on a daemon
+go fc.DaemonClean(nil)
+// NOTE: stop the daemon before exit
+// fc.StopDaemon()
+```
+
+See [CConfig on GoDoc](https://pkg.go.dev/github.com/gookit/rotatefile#CConfig) for clean options.
+
+## Related
+
+- [github.com/gookit/slog](https://github.com/gookit/slog) — lightweight structured logging (uses `rotatefile`)
+- [github.com/gookit/goutil](https://github.com/gookit/goutil) — Go utility library
+
+## License
+
+[MIT](LICENSE)
