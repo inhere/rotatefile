@@ -51,10 +51,10 @@ var (
 func fullVersion() string {
 	s := Version
 	if GitCommit != "" {
-		s += "@" + GitCommit
+		s += ", " + GitCommit
 	}
 	if BuildTime != "" {
-		s += " " + BuildTime
+		s += ", " + BuildTime
 	}
 	// if GoVersion != "" {
 	// 	s += " go" + GoVersion
@@ -62,6 +62,7 @@ func fullVersion() string {
 	return s
 }
 
+var showVer bool
 var opts = struct {
 	config string
 	daemon bool
@@ -70,16 +71,24 @@ var opts = struct {
 
 func main() {
 	c := cflag.New(func(c *cflag.CFlags) {
-		c.Desc = "Clean old/expired log or backup files by patterns (config via JSON file)"
-		c.Version = fullVersion()
+		c.Desc = "Clean old/expired log or backup files by patterns, config via JSON file"
+		c.Version = Version
 	})
 
 	c.StringVar(&opts.config, "config", "filecleaner.json", "the JSON config file path;;c")
 	c.BoolVar(&opts.daemon, "daemon", false, "run as daemon and clean periodically;;d")
 	c.BoolVar(&opts.dryRun, "dry-run", false, "only print the files to be removed, do not delete")
+	c.BoolVar(&showVer, "version", false, "print the verion;;V")
 
 	c.Example = "{{cmd}} -c filecleaner.json\n  {{cmd}} --dry-run -c filecleaner.json\n  {{cmd}} --daemon -c filecleaner.json"
 	c.Func = run
+	c.AfterFlagParse = func(c *cflag.CFlags) bool {
+		if showVer {
+			fmt.Println(fullVersion())
+			return false
+		}
+		return true
+	}
 
 	// use Parse (not MustParse) so a failure exits non-zero for scripts/cron.
 	if err := c.Parse(nil); err != nil {
