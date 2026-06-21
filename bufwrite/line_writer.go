@@ -8,18 +8,26 @@ const (
 	defaultBufSize = 1024 * 8
 )
 
-// LineWriter implements buffering for an io.Writer object.
-// If an error occurs writing to a LineWriter, no more data will be
-// accepted and all subsequent writes, and Flush, will return the error.
-// After all data has been written, the client should call the
-// Flush method to guarantee all data has been forwarded to
-// the underlying io.Writer.
+// LineWriter is a buffered io.Writer that keeps every single Write intact.
 //
-// from bufio.Writer.
+// Adapted from bufio.Writer. The key difference: when the incoming data does
+// not fit in the remaining buffer, bufio.Writer fills the buffer, flushes, and
+// continues with the rest — so one Write call can be split across two flushes.
+// For logging that means an external collector reading the underlying writer
+// could observe a half-written line (e.g. a truncated JSON record).
 //
-// Change:
+// LineWriter instead guarantees each Write(p) is delivered to the underlying
+// writer as a whole: p is either fully buffered, or (if it doesn't fit) the
+// buffer is flushed first and then p is written in a single underlying Write.
+// So a complete log line/record always reaches the destination unsplit.
 //
-// always keep write full line. more difference please see Write
+// NOTE:
+//   - "Line" means "one logical line/record per Write call". It does NOT flush
+//     on the '\n' byte and is not line-buffered in the C-stdio sense.
+//   - It is NOT safe for concurrent use; guard Write/Flush with an external lock.
+//   - On a write error, no more data is accepted and all subsequent Write and
+//     Flush calls return that error. Call Flush (or Close) when done to ensure
+//     buffered data is forwarded to the underlying io.Writer.
 type LineWriter struct {
 	err error
 	buf []byte
