@@ -228,7 +228,7 @@ func (r *FilesClear) Clean() error {
 func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 	r.prepare()
 
-	oldFiles := make([]fileInfo, 0, 8)
+	oldFiles := make([]fsutil.FileInfo, 0, 8)
 	cutTime := r.cfg.TimeClock.Now().Add(-r.backupDur)
 
 	// find and clean expired files
@@ -245,7 +245,7 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 
 		// collect not expired
 		if stat.ModTime().After(cutTime) {
-			oldFiles = append(oldFiles, newFileInfo(filePath, stat))
+			oldFiles = append(oldFiles, fsutil.NewFileInfo(filePath, stat))
 			return nil
 		}
 
@@ -259,7 +259,7 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 
 	if backNum > 0 && remNum > 0 {
 		// sort by mod-time, oldest at first.
-		sort.Sort(modTimeFInfos(oldFiles))
+		sort.Sort(fsutil.FileInfos(oldFiles))
 
 		for idx := 0; idx < len(oldFiles); idx++ {
 			if err = r.remove(oldFiles[idx].Path()); err != nil {

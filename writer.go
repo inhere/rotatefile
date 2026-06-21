@@ -412,7 +412,7 @@ func (d *Writer) Clean() (err error) {
 // - skipSeconds: skip find files that are within the specified seconds
 func (d *Writer) doClean(skipSeconds ...int) (err error) {
 	// oldFiles: xx.log.yy files, no gz file
-	var oldFiles, gzFiles []fileInfo
+	var oldFiles, gzFiles []fsutil.FileInfo
 	// fileDir/fileName are immutable after init(); d.path is changed on rotate,
 	// so snapshot it under pathMu to avoid racing with openFile.
 	fileDir, fileName := d.fileDir, d.fileName
@@ -441,9 +441,9 @@ func (d *Writer) doClean(skipSeconds ...int) (err error) {
 		}
 
 		if strings.HasSuffix(ent.Name(), compressSuffix) {
-			gzFiles = append(gzFiles, newFileInfo(fPath, fi))
+			gzFiles = append(gzFiles, fsutil.NewFileInfo(fPath, fi))
 		} else if fi.ModTime().Before(limitTime) {
-			oldFiles = append(oldFiles, newFileInfo(fPath, fi))
+			oldFiles = append(oldFiles, fsutil.NewFileInfo(fPath, fi))
 		}
 		return nil
 	}, d.buildFilterFns(fileName)...)
@@ -479,14 +479,14 @@ func (d *Writer) doClean(skipSeconds ...int) (err error) {
 }
 
 // remove old gz files
-func (d *Writer) removeOldGzFiles(remNum int, gzFiles []fileInfo) (rn int, err error) {
+func (d *Writer) removeOldGzFiles(remNum int, gzFiles []fsutil.FileInfo) (rn int, err error) {
 	gzNum := len(gzFiles)
-	sort.Sort(modTimeFInfos(gzFiles)) // sort by mod-time
+	sort.Sort(fsutil.FileInfos(gzFiles)) // sort by mod-time
 	d.debugLog("remove old gz files ...")
 
 	for idx := 0; idx < gzNum; idx++ {
-		d.debugLog("remove old gz file:", gzFiles[idx].filePath)
-		if err = os.Remove(gzFiles[idx].filePath); err != nil {
+		d.debugLog("remove old gz file:", gzFiles[idx].Path())
+		if err = os.Remove(gzFiles[idx].Path()); err != nil {
 			break
 		}
 
@@ -503,17 +503,17 @@ func (d *Writer) removeOldGzFiles(remNum int, gzFiles []fileInfo) (rn int, err e
 }
 
 // remove old log files
-func (d *Writer) removeOldFiles(remNum int, oldFiles []fileInfo) (files []fileInfo, err error) {
+func (d *Writer) removeOldFiles(remNum int, oldFiles []fsutil.FileInfo) (files []fsutil.FileInfo, err error) {
 	// sort by mod-time, oldest at first.
-	sort.Sort(modTimeFInfos(oldFiles))
+	sort.Sort(fsutil.FileInfos(oldFiles))
 	d.debugLog("remove old normal files ...")
 
 	var idx int
 	oldNum := len(oldFiles)
 
 	for idx = 0; idx < oldNum; idx++ {
-		d.debugLog("remove old file:", oldFiles[idx].filePath)
-		if err = os.Remove(oldFiles[idx].filePath); err != nil {
+		d.debugLog("remove old file:", oldFiles[idx].Path())
+		if err = os.Remove(oldFiles[idx].Path()); err != nil {
 			break
 		}
 
@@ -595,16 +595,16 @@ func (d *Writer) buildFilterFns(fileName string) []fsutil.FilterFunc {
 	return filterFns
 }
 
-func (d *Writer) compressFiles(oldFiles []fileInfo) error {
+func (d *Writer) compressFiles(oldFiles []fsutil.FileInfo) error {
 	for _, fi := range oldFiles {
-		err := compressFile(fi.filePath, fi.filePath+compressSuffix)
+		err := compressFile(fi.Path(), fi.Path()+compressSuffix)
 		if err != nil {
 			return errorx.Wrap(err, "compress old file error")
 		}
 
 		// remove an old log file
-		d.debugLog("compress and rm old file:", fi.filePath)
-		if err = os.Remove(fi.filePath); err != nil {
+		d.debugLog("compress and rm old file:", fi.Path())
+		if err = os.Remove(fi.Path()); err != nil {
 			return errorx.Wrap(err, "remove file error after compress")
 		}
 	}
