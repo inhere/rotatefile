@@ -1,0 +1,23 @@
+{
+  "jobs": [
+    {
+      "patterns": [
+        "/var/log/app/*.log.*"
+      ],
+      "backup_num": 20,
+      "backup_time": 168,
+      "time_unit": "1h",
+      "compress": true
+    },
+    {
+      "patterns": [
+        "/var/log/svc"
+      ],
+      "recursive": true,
+      "remove_empty_dir": true,
+      "backup_time": 7,
+      "time_unit": "24h",
+      "ignore_error": true
+    }
+  ]
+}
