@@ -38,6 +38,30 @@ type fileConfig struct {
 	Jobs []jobConfig `json:"jobs"`
 }
 
+// build info, can be injected via -ldflags at build time (see Makefile).
+var (
+	Version   = "0.1.0"
+	GitCommit = ""
+	GoVersion = ""
+	BuildTime = ""
+)
+
+// fullVersion builds a version string. extra build info is appended only when
+// injected via -ldflags, so a plain `go build` still shows just the version.
+func fullVersion() string {
+	s := Version
+	if GitCommit != "" {
+		s += "@" + GitCommit
+	}
+	if BuildTime != "" {
+		s += " " + BuildTime
+	}
+	if GoVersion != "" {
+		s += " go" + GoVersion
+	}
+	return s
+}
+
 var opts = struct {
 	config string
 	daemon bool
@@ -47,7 +71,7 @@ var opts = struct {
 func main() {
 	c := cflag.New(func(c *cflag.CFlags) {
 		c.Desc = "Clean old/expired log or backup files by patterns (config via JSON file)"
-		c.Version = "0.1.0"
+		c.Version = fullVersion()
 	})
 
 	c.StringVar(&opts.config, "config", "filecleaner.json", "the JSON config file path;;c")
