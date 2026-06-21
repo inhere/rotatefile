@@ -9,8 +9,8 @@ import (
 	"github.com/gookit/goutil/fsutil"
 	"github.com/gookit/goutil/mathutil"
 	"github.com/gookit/goutil/x/assert"
-	"github.com/gookit/rotatefile/internal"
 	"github.com/gookit/rotatefile"
+	"github.com/gookit/rotatefile/internal"
 )
 
 func TestNewWriter(t *testing.T) {
