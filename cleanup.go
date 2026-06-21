@@ -8,6 +8,7 @@ import (
 
 	"github.com/gookit/goutil/errorx"
 	"github.com/gookit/goutil/fsutil"
+	"github.com/gookit/rotatefile/internal"
 )
 
 const defaultCheckInterval = 60 * time.Second
@@ -191,7 +192,7 @@ func (r *FilesClear) DaemonClean(onStop func()) {
 			}
 			return
 		case <-tk.C: // do cleaning
-			printErrln("files-clear: cleanup old files error:", r.Clean())
+			internal.PrintErrln("files-clear: cleanup old files error:", r.Clean())
 		}
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/gookit/goutil/mathutil"
 	"github.com/gookit/goutil/strutil"
 	"github.com/gookit/goutil/x/stdio"
+	"github.com/gookit/rotatefile/internal"
 )
 
 // Writer a flush, close, writer and support rotate file.
@@ -132,7 +133,7 @@ func (d *Writer) Sync() error {
 func (d *Writer) Close() error {
 	if d.cfg.CleanOnClose {
 		d.debugLog("cfg.CleanOnClose=true: start clean old files")
-		printErrln("files-clear-onClose: cleanup old files error:", d.Clean())
+		internal.PrintErrln("files-clear-onClose: cleanup old files error:", d.Clean())
 	}
 
 	return d.close(true)
@@ -140,7 +141,7 @@ func (d *Writer) Close() error {
 
 // MustClose the writer. alias of Close(), but will panic if has error.
 func (d *Writer) MustClose() {
-	printErrln("rotatefile: close writer -", d.Close())
+	internal.PrintErrln("rotatefile: close writer -", d.Close())
 }
 
 func (d *Writer) close(closeStopCh bool) error {
@@ -373,7 +374,7 @@ func (d *Writer) cleanConsumer(cleanCh, stopCh chan struct{}) {
 		select {
 		case <-cleanCh:
 			d.debugLog("receive signal - clean old files handling")
-			printErrln("rotatefile: clean old files error:", d.doClean())
+			internal.PrintErrln("rotatefile: clean old files error:", d.doClean())
 		case <-stopCh:
 			d.debugLog("STOP consumer for clean old files")
 			return // stop clean
@@ -440,7 +441,7 @@ func (d *Writer) doClean(skipSeconds ...int) (err error) {
 			return nil
 		}
 
-		if strings.HasSuffix(ent.Name(), compressSuffix) {
+		if strings.HasSuffix(ent.Name(), internal.CompressSuffix) {
 			gzFiles = append(gzFiles, fsutil.NewFileInfo(fPath, fi))
 		} else if fi.ModTime().Before(limitTime) {
 			oldFiles = append(oldFiles, fsutil.NewFileInfo(fPath, fi))
@@ -587,7 +588,7 @@ func (d *Writer) buildFilterFns(fileName string) []fsutil.FilterFunc {
 
 			// remove expired files
 			d.debugLog("remove expired file:", fPath)
-			printErrln("rotatefile: remove expired file error:", os.Remove(fPath))
+			internal.PrintErrln("rotatefile: remove expired file error:", os.Remove(fPath))
 			return false
 		})
 	}
@@ -597,7 +598,7 @@ func (d *Writer) buildFilterFns(fileName string) []fsutil.FilterFunc {
 
 func (d *Writer) compressFiles(oldFiles []fsutil.FileInfo) error {
 	for _, fi := range oldFiles {
-		err := compressFile(fi.Path(), fi.Path()+compressSuffix)
+		err := internal.CompressFile(fi.Path(), fi.Path()+internal.CompressSuffix)
 		if err != nil {
 			return errorx.Wrap(err, "compress old file error")
 		}
