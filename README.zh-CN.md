@@ -21,7 +21,6 @@
 - 用 gzip **压缩**已轮转的文件
 - 可定制:按大小轮转时的文件名、时间时钟、文件权限
 - `FilesClear` —— 独立的旧文件清理器,可用于任意程序的日志清理(甚至非 Go,如 PHP-FPM)
-- [`filecleaner`](cmd/filecleaner) 命令行工具 —— 基于 `FilesClear`、用 JSON 配置的清理命令行
 - 子包 [`bufwrite`](bufwrite) —— 缓冲写,其中 `LineWriter` 保证每次写入(一条日志)完整不被拆分
 - 依赖极少:仅 `github.com/gookit/goutil`
 
@@ -140,32 +139,6 @@ go fc.DaemonClean(nil)
 ```
 
 清理选项见 [GoDoc 上的 CConfig](https://pkg.go.dev/github.com/gookit/rotatefile#CConfig)。
-
-## `filecleaner` 命令行工具
-
-[`cmd/filecleaner`](cmd/filecleaner) 是基于 `FilesClear` 的命令行小工具,通过 JSON 文件配置,
-按 pattern 清理旧/过期文件 —— 适合放进 cron 定时任务,或清理非 Go 程序的日志。
-
-```bash
-go install github.com/gookit/rotatefile/cmd/filecleaner@latest
-
-filecleaner -c filecleaner.json            # 一次性清理
-filecleaner --dry-run -c filecleaner.json  # 预演:只打印将删除的文件,不实际删除
-filecleaner --daemon  -c filecleaner.json  # 周期运行,直到 Ctrl+C
-```
-
-配置文件 —— `jobs` 数组,每个 job 一组独立保留策略:
-
-```json
-{
-  "jobs": [
-    { "patterns": ["/var/log/app/*.log.*"], "backup_num": 20, "backup_time": 168, "time_unit": "1h" },
-    { "patterns": ["/var/log/svc"], "recursive": true, "remove_empty_dir": true, "backup_time": 7, "time_unit": "24h" }
-  ]
-}
-```
-
-完整选项见 [cmd/filecleaner/README.md](cmd/filecleaner/README.md)。
 
 ## 相关项目
 

@@ -17,11 +17,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Go Faster
+        uses: WillAbides/setup-go-faster@v1.19.0
+        timeout-minutes: 3
+        with:
+          go-version: "1.20"
+
       - name: Setup ENV
         # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-commands-for-github-actions#setting-an-environment-variable
         run: |
           echo "RELEASE_TAG=${GITHUB_REF:10}" >> $GITHUB_ENV
           echo "RELEASE_NAME=$GITHUB_WORKFLOW" >> $GITHUB_ENV
+
+      - name: Mod tidy cmd/filecleaner
+        run: cd cmd/filecleaner && go mod tidy
+
+      - name: Build bin package
+        run: |
+          make build-all
+          ./cmd/dist/filecleaner-linux-amd64 -V
 
       - name: Generate changelog
         run: |
@@ -39,4 +53,5 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           body_path: changelog.md
           token: ${{ secrets.GITHUB_TOKEN }}
-#          files: macos-chlog.exe
+          files: |
+            cmd/dist/*
