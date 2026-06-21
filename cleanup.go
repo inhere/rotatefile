@@ -1,6 +1,7 @@
 package rotatefile
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -57,6 +58,9 @@ type CConfig struct {
 
 	// IgnoreError ignore remove file error, continue to clean other files.
 	IgnoreError bool `json:"ignore_error" yaml:"ignore_error"`
+
+	// DryRun only print the files to be removed, do not actually remove them.
+	DryRun bool `json:"dry_run" yaml:"dry_run"`
 
 	// RotateMode for rotate split files TODO
 	//  - copy+cut: copy contents then truncate file
@@ -309,7 +313,8 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 	}
 
 	// remove subdirs that became empty after cleaning (best-effort).
-	if err == nil && r.cfg.RemoveEmptyDir {
+	// skip in dry-run: no files were removed, so nothing should be deleted.
+	if err == nil && r.cfg.RemoveEmptyDir && !r.cfg.DryRun {
 		for _, dir := range matchedDirs {
 			removeEmptyDirs(dir)
 		}
@@ -336,6 +341,12 @@ func removeEmptyDirs(root string) {
 }
 
 func (r *FilesClear) remove(filePath string) error {
+	// dry-run: only print, do not actually remove
+	if r.cfg.DryRun {
+		fmt.Println("[dry-run] files-clear: would remove file:", filePath)
+		return nil
+	}
+
 	err := os.Remove(filePath)
 	// ignore remove error, continue to clean other files
 	if err != nil && r.cfg.IgnoreError {

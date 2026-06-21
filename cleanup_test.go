@@ -120,6 +120,30 @@ func TestFilesClear_Clean(t *testing.T) {
 		// all files removed and the now-empty subdir is gone
 		assert.False(t, fsutil.IsDir(base))
 	})
+
+	// DryRun: nothing is actually removed.
+	t.Run("dry run", func(t *testing.T) {
+		makeNum := 3
+		for i := 0; i < makeNum; i++ {
+			_, err := fsutil.PutContents(fmt.Sprintf("testdata/dry_run.log.%03d", i), []byte("data"))
+			assert.NoErr(t, err)
+		}
+		defer func() {
+			for i := 0; i < makeNum; i++ {
+				_ = os.Remove(fmt.Sprintf("testdata/dry_run.log.%03d", i))
+			}
+		}()
+
+		fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
+			c.AddPattern("testdata/dry_run.log.*")
+			c.BackupNum = 1
+			c.BackupTime = 0
+			c.DryRun = true
+		})
+
+		assert.NoErr(t, fc.Clean())
+		assert.Eq(t, makeNum, len(fsutil.Glob("testdata/dry_run.log.*")))
+	})
 }
 
 func TestFilesClear_DaemonClean(t *testing.T) {
