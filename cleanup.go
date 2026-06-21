@@ -1,7 +1,9 @@
 package rotatefile
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -33,6 +35,12 @@ type CConfig struct {
 	//
 	// eg: ["/tmp/error.log.*", "/path/to/info.log.*", "/path/to/dir/*"]
 	Patterns []string `json:"patterns" yaml:"patterns"`
+
+	// Recursive clean files in matched subdirectories too. default is false.
+	//
+	// NOTE: when enabled, BackupNum/BackupTime apply to all files collected
+	// per pattern (including nested ones) as a single pool.
+	Recursive bool `json:"recursive" yaml:"recursive"`
 
 	// TimeClock for clean files
 	TimeClock Clocker
@@ -229,6 +237,17 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 	oldFiles := make([]fsutil.FileInfo, 0, 8)
 	cutTime := r.cfg.TimeClock.Now().Add(-backupDur)
 
+	// handleFile removes the expired file, otherwise collects it for clean-by-number.
+	// NOTE: when backupDur<=0 (no time limit) files must NOT be treated as expired,
+	// otherwise all files would be wrongly removed (cutTime would be "now").
+	handleFile := func(filePath string, stat fs.FileInfo) error {
+		if backupDur <= 0 || stat.ModTime().After(cutTime) {
+			oldFiles = append(oldFiles, fsutil.NewFileInfo(filePath, stat))
+			return nil
+		}
+		return r.remove(filePath)
+	}
+
 	// find and clean expired files
 	err = fsutil.GlobWithFunc(filePattern, func(filePath string) error {
 		stat, err := os.Stat(filePath)
@@ -236,21 +255,24 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 			return err
 		}
 
-		// not handle subdir TODO: support subdir
-		if stat.IsDir() {
-			return nil
+		if !stat.IsDir() {
+			return handleFile(filePath, stat)
 		}
 
-		// no time limit, or not expired: collect for clean by number.
-		// NOTE: when backupDur<=0 we must NOT treat files as expired, otherwise
-		// all files would be wrongly removed (cutTime would be "now").
-		if backupDur <= 0 || stat.ModTime().After(cutTime) {
-			oldFiles = append(oldFiles, fsutil.NewFileInfo(filePath, stat))
+		// a matched dir: recurse into it when enabled, otherwise skip
+		if !r.cfg.Recursive {
 			return nil
 		}
-
-		// remove expired file
-		return r.remove(filePath)
+		return filepath.WalkDir(filePath, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			fi, err := d.Info()
+			if err != nil {
+				return err
+			}
+			return handleFile(p, fi)
+		})
 	})
 
 	// scan error: do not continue to clean by number, and do not swallow it.

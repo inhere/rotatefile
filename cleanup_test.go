@@ -68,6 +68,32 @@ func TestFilesClear_Clean(t *testing.T) {
 		files := fsutil.Glob("testdata/file_num_only.log.*")
 		assert.Eq(t, 2, len(files))
 	})
+
+	// files nested in a subdir are only cleaned when Recursive is enabled.
+	t.Run("recursive subdir", func(t *testing.T) {
+		base := "testdata/rec_parent/sub"
+		defer os.RemoveAll("testdata/rec_parent")
+
+		makeNum := 4
+		for i := 0; i < makeNum; i++ {
+			_, err := fsutil.PutContents(fmt.Sprintf("%s/app.log.%03d", base, i), []byte("data"))
+			assert.NoErr(t, err)
+		}
+
+		// pattern matches the subdir entry; without Recursive it is skipped.
+		fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
+			c.AddPattern("testdata/rec_parent/*")
+			c.BackupNum = 2
+			c.BackupTime = 0
+		})
+		assert.NoErr(t, fc.Clean())
+		assert.Eq(t, makeNum, len(fsutil.Glob(base+"/app.log.*")))
+
+		// with Recursive: nested files are cleaned by number, keep newest 2.
+		fc.WithConfigFn(func(c *rotatefile.CConfig) { c.Recursive = true })
+		assert.NoErr(t, fc.Clean())
+		assert.Eq(t, 2, len(fsutil.Glob(base+"/app.log.*")))
+	})
 }
 
 func TestFilesClear_DaemonClean(t *testing.T) {
