@@ -8,6 +8,8 @@
 go install github.com/gookit/rotatefile/cmd/filecleaner@latest
 # 或在本目录下
 go build -o filecleaner .
+# 或在仓库根目录用 Makefile 构建(注入版本信息,产物输出到仓库根)
+make build
 ```
 
 ## 使用

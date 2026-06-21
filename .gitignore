@@ -32,8 +32,3 @@ changelog.md
 testdata
 _example/go.sum
 .xenv.*
-
-# filecleaner build artifacts
-/filecleaner
-/cmd/dist
-/cmd/release
