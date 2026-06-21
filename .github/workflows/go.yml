@@ -1,0 +1,54 @@
+name: Unit-Tests
+on:
+  pull_request:
+    paths:
+      - "go.mod"
+      - "**.go"
+      - "**.yml"
+  push:
+    branches: # Only trigger branch pushes; tag pushes are ignored.
+      - "**"
+    paths:
+      - "go.mod"
+      - "**.go"
+      - "**.yml"
+
+jobs:
+  test:
+    name: Test on go ${{ matrix.go_version }} and ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go_version: [1.25, 1.24, 1.23, 1.21, "1.20", stable]
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Setup Go SDK
+        uses: actions/setup-go@v6
+        timeout-minutes: 3
+        with:
+          go-version: ${{ matrix.go_version }}
+
+      - name: Tidy go mod
+        run: go mod tidy
+
+      - name: Run staticcheck
+        uses: reviewdog/action-staticcheck@v1
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          filter_mode: added
+          fail_on_error: true
+
+      - name: Run unit tests
+        run: go test -cover ./...
+
+      # Race detector is slow (~5-10x) and only supported on linux/amd64, so run
+      # it on a single recent-Go + ubuntu job instead of the whole matrix.
+      - name: Run unit tests with race detector
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.go_version == 'stable' }}
+        run: go test -race ./...
