@@ -42,6 +42,10 @@ type CConfig struct {
 	// per pattern (including nested ones) as a single pool.
 	Recursive bool `json:"recursive" yaml:"recursive"`
 
+	// RemoveEmptyDir remove subdirectories that become empty after cleaning.
+	// only takes effect together with Recursive. default is false.
+	RemoveEmptyDir bool `json:"remove_empty_dir" yaml:"remove_empty_dir"`
+
 	// TimeClock for clean files
 	TimeClock Clocker
 
@@ -248,6 +252,9 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 		return r.remove(filePath)
 	}
 
+	// matched subdirs we recursed into; used for empty-dir cleanup at the end.
+	var matchedDirs []string
+
 	// find and clean expired files
 	err = fsutil.GlobWithFunc(filePattern, func(filePath string) error {
 		stat, err := os.Stat(filePath)
@@ -263,6 +270,7 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 		if !r.cfg.Recursive {
 			return nil
 		}
+		matchedDirs = append(matchedDirs, filePath)
 		return filepath.WalkDir(filePath, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
@@ -299,7 +307,32 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 			}
 		}
 	}
+
+	// remove subdirs that became empty after cleaning (best-effort).
+	if err == nil && r.cfg.RemoveEmptyDir {
+		for _, dir := range matchedDirs {
+			removeEmptyDirs(dir)
+		}
+	}
 	return
+}
+
+// removeEmptyDirs removes empty directories under root (bottom-up), best-effort.
+//
+// NOTE: os.Remove only deletes empty dirs, so non-empty ones are left intact.
+func removeEmptyDirs(root string) {
+	var dirs []string
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+
+	// remove deepest first so parent dirs can become empty too
+	for i := len(dirs) - 1; i >= 0; i-- {
+		_ = os.Remove(dirs[i])
+	}
 }
 
 func (r *FilesClear) remove(filePath string) error {

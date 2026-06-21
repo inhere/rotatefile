@@ -94,6 +94,32 @@ func TestFilesClear_Clean(t *testing.T) {
 		assert.NoErr(t, fc.Clean())
 		assert.Eq(t, 2, len(fsutil.Glob(base+"/app.log.*")))
 	})
+
+	// RemoveEmptyDir: a subdir emptied by cleaning is removed too.
+	t.Run("recursive remove empty dir", func(t *testing.T) {
+		base := "testdata/rec_empty/sub"
+		defer os.RemoveAll("testdata/rec_empty")
+
+		for i := 0; i < 3; i++ {
+			_, err := fsutil.PutContents(fmt.Sprintf("%s/app.log.%03d", base, i), []byte("data"))
+			assert.NoErr(t, err)
+		}
+		assert.True(t, fsutil.IsDir(base))
+
+		fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
+			c.AddPattern("testdata/rec_empty/*")
+			c.Recursive = true
+			c.RemoveEmptyDir = true
+			// all real files are expired against the mock future clock -> removed
+			c.TimeClock = rotatefile.NewMockClock("2099-01-01 00:00:00")
+			c.BackupTime = 1
+			c.TimeUnit = time.Hour
+		})
+
+		assert.NoErr(t, fc.Clean())
+		// all files removed and the now-empty subdir is gone
+		assert.False(t, fsutil.IsDir(base))
+	})
 }
 
 func TestFilesClear_DaemonClean(t *testing.T) {
