@@ -51,6 +51,23 @@ func TestFilesClear_Clean(t *testing.T) {
 		})
 		assert.Err(t, fc.Clean())
 	})
+
+	// regression: BackupTime=0 (no time limit) must keep newest BackupNum
+	// files instead of deleting everything.
+	t.Run("by number only", func(t *testing.T) {
+		makeNum := 4
+		makeWaitCleanFiles("file_num_only.log", makeNum)
+
+		fc := rotatefile.NewFilesClear(func(c *rotatefile.CConfig) {
+			c.AddPattern("testdata/file_num_only.log.*")
+			c.BackupNum = 2
+			c.BackupTime = 0 // no time limit
+		})
+
+		assert.NoErr(t, fc.Clean())
+		files := fsutil.Glob("testdata/file_num_only.log.*")
+		assert.Eq(t, 2, len(files))
+	})
 }
 
 func TestFilesClear_DaemonClean(t *testing.T) {

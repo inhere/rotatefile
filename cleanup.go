@@ -43,8 +43,8 @@ type CConfig struct {
 	// CheckInterval for clean files on daemon run. default is 60s.
 	CheckInterval time.Duration `json:"check_interval" yaml:"check_interval"`
 
-	// IgnoreError ignore remove error
-	// TODO IgnoreError bool
+	// IgnoreError ignore remove file error, continue to clean other files.
+	IgnoreError bool `json:"ignore_error" yaml:"ignore_error"`
 
 	// RotateMode for rotate split files TODO
 	//  - copy+cut: copy contents then truncate file
@@ -101,11 +101,7 @@ type FilesClear struct {
 	// mu guards quitDaemon (created in DaemonClean, read/closed in StopDaemon)
 	mu  sync.Mutex
 	cfg *CConfig
-	// inited mark
-	inited bool
 
-	// file max backup time. equals CConfig.BackupTime * CConfig.TimeUnit
-	backupDur  time.Duration
 	quitDaemon chan struct{}
 }
 
@@ -181,8 +177,17 @@ func (r *FilesClear) DaemonClean(onStop func()) {
 	quit := r.quitDaemon
 	r.mu.Unlock()
 
-	tk := time.NewTicker(r.cfg.CheckInterval)
+	// fallback to default to avoid time.NewTicker panic on interval <= 0
+	interval := r.cfg.CheckInterval
+	if interval <= 0 {
+		interval = defaultCheckInterval
+	}
+
+	tk := time.NewTicker(interval)
 	defer tk.Stop()
+
+	// do an initial clean immediately on start
+	internal.PrintErrln("files-clear: cleanup old files error:", r.Clean())
 
 	for {
 		select {
@@ -194,19 +199,6 @@ func (r *FilesClear) DaemonClean(onStop func()) {
 		case <-tk.C: // do cleaning
 			internal.PrintErrln("files-clear: cleanup old files error:", r.Clean())
 		}
-	}
-}
-
-// Clean old files by config
-func (r *FilesClear) prepare() {
-	if r.inited {
-		return
-	}
-	r.inited = true
-
-	// check backup time
-	if r.cfg.BackupTime > 0 {
-		r.backupDur = time.Duration(r.cfg.BackupTime) * r.cfg.TimeUnit
 	}
 }
 
@@ -227,10 +219,15 @@ func (r *FilesClear) Clean() error {
 
 // CleanByPattern clean files by pattern
 func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
-	r.prepare()
+	// backupDur > 0 means clean by mod-time is enabled. compute on each call so
+	// config changes (BackupTime/TimeUnit) take effect and avoid shared state.
+	var backupDur time.Duration
+	if r.cfg.BackupTime > 0 {
+		backupDur = time.Duration(r.cfg.BackupTime) * r.cfg.TimeUnit
+	}
 
 	oldFiles := make([]fsutil.FileInfo, 0, 8)
-	cutTime := r.cfg.TimeClock.Now().Add(-r.backupDur)
+	cutTime := r.cfg.TimeClock.Now().Add(-backupDur)
 
 	// find and clean expired files
 	err = fsutil.GlobWithFunc(filePattern, func(filePath string) error {
@@ -244,8 +241,10 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 			return nil
 		}
 
-		// collect not expired
-		if stat.ModTime().After(cutTime) {
+		// no time limit, or not expired: collect for clean by number.
+		// NOTE: when backupDur<=0 we must NOT treat files as expired, otherwise
+		// all files would be wrongly removed (cutTime would be "now").
+		if backupDur <= 0 || stat.ModTime().After(cutTime) {
 			oldFiles = append(oldFiles, fsutil.NewFileInfo(filePath, stat))
 			return nil
 		}
@@ -253,6 +252,11 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 		// remove expired file
 		return r.remove(filePath)
 	})
+
+	// scan error: do not continue to clean by number, and do not swallow it.
+	if err != nil {
+		return errorx.Wrap(err, "files-clear: scan files error")
+	}
 
 	// clear by backup number.
 	backNum := int(r.cfg.BackupNum)
@@ -276,6 +280,12 @@ func (r *FilesClear) cleanByPattern(filePattern string) (err error) {
 	return
 }
 
-func (r *FilesClear) remove(filePath string) (err error) {
-	return os.Remove(filePath)
+func (r *FilesClear) remove(filePath string) error {
+	err := os.Remove(filePath)
+	// ignore remove error, continue to clean other files
+	if err != nil && r.cfg.IgnoreError {
+		internal.PrintErrln("files-clear: remove file error (ignored):", err)
+		return nil
+	}
+	return err
 }
