@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gookit/goutil"
 	"github.com/gookit/goutil/timex"
+	"github.com/gookit/goutil/x/basefn"
 )
 
 // RotateWriter interface
@@ -42,7 +42,7 @@ type MockClocker struct {
 
 // NewMockClock create a mock time instance from datetime string.
 func NewMockClock(datetime string) *MockClocker {
-	nt := goutil.Must(timex.FromString(datetime))
+	nt := basefn.Must(timex.FromString(datetime))
 	return &MockClocker{tt: nt.Time}
 }
 
