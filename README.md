@@ -24,7 +24,6 @@ rotation; this fills that gap.
 - Customizable: filename for size-rotation, time clock, file permission
 - `FilesClear` — a standalone old-files cleaner, usable for any program's logs
   (even non-Go ones, e.g. PHP-FPM)
-- [`filecleaner`](cmd/filecleaner) CLI — a JSON-configured command-line cleaner built on `FilesClear`
 - Sub-package [`bufwrite`](bufwrite) — buffered writers, incl. `LineWriter` that keeps
   every write (one log line) intact
 - Tiny dependency surface: only `github.com/gookit/goutil`
@@ -145,33 +144,6 @@ go fc.DaemonClean(nil)
 ```
 
 See [CConfig on GoDoc](https://pkg.go.dev/github.com/gookit/rotatefile#CConfig) for clean options.
-
-## `filecleaner` CLI
-
-[`cmd/filecleaner`](cmd/filecleaner) is a small command-line tool built on `FilesClear`.
-It cleans old/expired files by patterns, configured via a JSON file — handy for cron jobs
-or cleaning logs of non-Go programs.
-
-```bash
-go install github.com/gookit/rotatefile/cmd/filecleaner@latest
-
-filecleaner -c filecleaner.json            # one-off clean
-filecleaner --dry-run -c filecleaner.json  # print what would be removed, delete nothing
-filecleaner --daemon  -c filecleaner.json  # run periodically until Ctrl+C
-```
-
-Config file — a `jobs` array, one retention policy per job:
-
-```json
-{
-  "jobs": [
-    { "patterns": ["/var/log/app/*.log.*"], "backup_num": 20, "backup_time": 168, "time_unit": "1h" },
-    { "patterns": ["/var/log/svc"], "recursive": true, "remove_empty_dir": true, "backup_time": 7, "time_unit": "24h" }
-  ]
-}
-```
-
-See [cmd/filecleaner/README.md](cmd/filecleaner/README.md) for all options.
 
 ## Related
 
