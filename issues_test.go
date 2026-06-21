@@ -6,9 +6,9 @@ import (
 
 	"github.com/gookit/goutil/fsutil"
 	"github.com/gookit/goutil/mathutil"
-	"github.com/gookit/goutil/testutil/assert"
-	"github.com/gookit/rotatefile/internal"
+	"github.com/gookit/goutil/x/assert"
 	"github.com/gookit/rotatefile"
+	"github.com/gookit/rotatefile/internal"
 )
 
 // https://github.com/gookit/slog/issues/138

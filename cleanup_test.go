@@ -10,7 +10,7 @@ import (
 	"github.com/gookit/goutil"
 	"github.com/gookit/goutil/dump"
 	"github.com/gookit/goutil/fsutil"
-	"github.com/gookit/goutil/testutil/assert"
+	"github.com/gookit/goutil/x/assert"
 	"github.com/gookit/goutil/timex"
 	"github.com/gookit/rotatefile"
 )
